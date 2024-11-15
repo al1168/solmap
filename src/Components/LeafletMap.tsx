@@ -111,9 +111,7 @@ function LeafletMap() {
     const map = useMap();
 
     useEffect(() => {
-      map.invalidateSize(); // Ensures the map adjusts to its container's size
-
-      // Add click listener to the map
+      map.invalidateSize(); 
       map.on("click", handleMapClick);
 
       return () => {
@@ -130,9 +128,9 @@ function LeafletMap() {
       center={[38.7946, -106.5348]}
       zoom={5}
       scrollWheelZoom={true}
-      maxBounds={usBounds}
-      minZoom={4}
-      maxZoom={6}
+      // maxBounds={usBounds}
+      // minZoom={4}
+      // maxZoom={6}
     >
       <HandleResizeAndClick />
       <TileLayer
