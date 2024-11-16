@@ -146,14 +146,18 @@ def datetime_string():
     return s
 
 
-def solar_potential(lat: float, lon: float) -> float:
+def solar_potential(
+    lat: float,
+    lon: float,
+    use_local_cache: bool,
+    save_local_cache: bool,
+    ) -> float:
     """
     Take parameters specifying a real or simulated location. Return its yearly solar potential.
 
     Args:
         lat (float): Latitude
         lon (float): Longitude
-        [additional parameters to be implemented]
 
     Returns:
         generation (float): kWh/year/m2 of an optimally positioned solar panel
@@ -161,37 +165,51 @@ def solar_potential(lat: float, lon: float) -> float:
     load_dotenv()
     NREL_API_KEY = os.getenv("NREL_API_KEY")
     NREL_API_EMAIL = os.getenv("NREL_API_EMAIL")
-    try:
-        solar_weather_timeseries, solar_weather_metadata = pvlib.iotools.get_psm3(
+    solar_weather_cache_file_name = f"solar_local_cache/solar_weather_lat{lat}_lon{lon}.csv"
+    pv_cache_file_name = f"solar_local_cache/pv_lat{lat}_lon{lon}.csv"
+    if use_local_cache:
+        solar_weather_timeseries = pd.read_csv(solar_weather_cache_file_name)
+        pv_model_results = pd.read_csv(pv_cache_file_name)
+        generation_kWh_year = pv_model_results["Inverter Output (Wh)"].sum() / 1000
+        generation_kWh_year_m2 = generation_kWh_year / PV_PANEL_MODEL.Area
+        return generation_kWh_year_m2
+    else:
+        try:
+            solar_weather_timeseries, solar_weather_metadata = pvlib.iotools.get_psm3(
+                latitude=lat,
+                longitude=lon,
+                names=2019,
+                leap_day=False,
+                attributes=SOLAR_WEATHER_ATTRIBUTES,
+                map_variables=True,
+                api_key=NREL_API_KEY,
+                email=NREL_API_EMAIL,
+            )
+        except HTTPError:
+            print(f"Missing solar weather for {lat}, {lon}")
+            return None
+        except:
+            print(f"Other error for {lat}, {lon}")
+            return None
+        #warnings.warn("All altitudes are set to 0.")
+        pv_model_results = simulate_pv_ouptput(
+            solar_weather_timeseries,
             latitude=lat,
             longitude=lon,
-            names=2019,
-            leap_day=False,
-            attributes=SOLAR_WEATHER_ATTRIBUTES,
-            map_variables=True,
-            api_key=NREL_API_KEY,
-            email=NREL_API_EMAIL,
+            altitude=0,
+            pv_array_tilt=lat,
+            pv_array_azimuth=180,
+            pv_panel_model=PV_PANEL_MODEL,
+            inverter_model=INVERTER_MODEL,
         )
-    except HTTPError:
-        print(f"Missing solar weather for {lat}, {lon}")
-        return None
-    except:
-        print(f"Other error for {lat}, {lon}")
-        return None
-    #warnings.warn("All altitudes are set to 0.")
-    pv_model_results = simulate_pv_ouptput(
-        solar_weather_timeseries,
-        latitude=lat,
-        longitude=lon,
-        altitude=0,
-        pv_array_tilt=lat,
-        pv_array_azimuth=180,
-        pv_panel_model=PV_PANEL_MODEL,
-        inverter_model=INVERTER_MODEL,
-    )
-    generation_kWh_year = pv_model_results["Inverter Output (Wh)"].sum() / 1000
-    generation_kWh_year_m2 = generation_kWh_year / PV_PANEL_MODEL.Area
-    return generation_kWh_year_m2
+        generation_kWh_year = pv_model_results["Inverter Output (Wh)"].sum() / 1000
+        generation_kWh_year_m2 = generation_kWh_year / PV_PANEL_MODEL.Area
+        if save_local_cache:
+            solar_weather_timeseries.to_csv(solar_weather_cache_file_name)
+            print(f"Wrote {solar_weather_cache_file_name}")
+            pv_model_results.to_csv(pv_cache_file_name)
+            print(f"Wrote {pv_cache_file_name}")
+        return generation_kWh_year_m2
 
 
 def generate_values_at_points(df):
@@ -208,7 +226,22 @@ def generate_values_at_points(df):
         point = (row.lat, row.lon)
         if i[6] % 50 == 0:
             print(f"i = {i[6]}")
-        generation_list += [(point[0], point[1], solar_potential(point[0], point[1]), i[0])]
+        try:
+            solar_generation_value = solar_potential(
+                point[0],
+                point[1],
+                use_local_cache=True,
+                save_local_cache=False,
+                )
+        except:
+            print(f"Cache miss at {point[0]} {point[1]}, computing from scratch.")
+            solar_generation_value = solar_potential(
+                point[0],
+                point[1],
+                use_local_cache=False,
+                save_local_cache=True,
+                )
+        generation_list += [(point[0], point[1], solar_generation_value, i[0])]
     generation_df = pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"]).dropna().reset_index()
     file_name = f"generation_{datetime_string()}.csv"
     generation_df.to_csv(file_name)
@@ -220,10 +253,11 @@ def save_as_geojson(geo_df, solar_df):
     json_output = {"type": "FeatureCollection", "features": []}
     # currently assuming specific format for CD dataset
     # and for "real" generation
+    missing_value_count = 0
     for i, row in geo_df.iterrows():
         g = solar_df[solar_df.GEO_ID == i[0]]
         if g.shape[0] == 0:
-            print(f"passing on GEO_ID {i[0]}")
+            missing_value_count += 1
             continue
         assert g.shape[0] == 1
         assert g.lat.values[0] == row.lat
@@ -242,6 +276,8 @@ def save_as_geojson(geo_df, solar_df):
             "geometry": {"type": "Point", "coordinates": [row.lon, row.lat]},
         }
         json_output["features"] += [this_feature]
+    if missing_value_count > 0:
+        print(f"Missing values for {missing_value_count} geos, continuing.")
     file_name = f'solar_points_{datetime_string()}.json'
     with open(file_name, 'w') as f:
         json.dump(json_output, f)
