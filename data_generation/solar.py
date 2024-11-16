@@ -151,6 +151,8 @@ def solar_potential(
     lon: float,
     use_local_cache: bool,
     save_local_cache: bool,
+    cloud_adjustments: pd.DataFrame = None,
+    limit_query: str = None,
     ) -> float:
     """
     Take parameters specifying a real or simulated location. Return its yearly solar potential.
@@ -168,11 +170,14 @@ def solar_potential(
     solar_weather_cache_file_name = f"solar_local_cache/solar_weather_lat{lat}_lon{lon}.csv"
     pv_cache_file_name = f"solar_local_cache/pv_lat{lat}_lon{lon}.csv"
     if use_local_cache:
-        solar_weather_timeseries = pd.read_csv(solar_weather_cache_file_name)
-        pv_model_results = pd.read_csv(pv_cache_file_name)
-        generation_kWh_year = pv_model_results["Inverter Output (Wh)"].sum() / 1000
-        generation_kWh_year_m2 = generation_kWh_year / PV_PANEL_MODEL.Area
-        return generation_kWh_year_m2
+        try:
+            solar_weather_timeseries = pd.read_csv(solar_weather_cache_file_name, index_col=0)
+            pv_model_results = pd.read_csv(pv_cache_file_name, index_col=0)
+            for d in [solar_weather_timeseries, pv_model_results]:
+                d.index = pd.to_datetime(d.index)
+        except:
+            print(f"Cache miss at {lat}, {lon}: computing from scratch.")
+            return solar_potential(lat, lon, False, save_local_cache)
     else:
         try:
             solar_weather_timeseries, solar_weather_metadata = pvlib.iotools.get_psm3(
@@ -202,14 +207,47 @@ def solar_potential(
             pv_panel_model=PV_PANEL_MODEL,
             inverter_model=INVERTER_MODEL,
         )
-        generation_kWh_year = pv_model_results["Inverter Output (Wh)"].sum() / 1000
-        generation_kWh_year_m2 = generation_kWh_year / PV_PANEL_MODEL.Area
-        if save_local_cache:
-            solar_weather_timeseries.to_csv(solar_weather_cache_file_name)
-            print(f"Wrote {solar_weather_cache_file_name}")
-            pv_model_results.to_csv(pv_cache_file_name)
-            print(f"Wrote {pv_cache_file_name}")
-        return generation_kWh_year_m2
+    if cloud_adjustments is not None:
+        assert cloud_adjustments.shape[0] == solar_weather_timeseries.shape[0]
+        solar_weather_timeseries_mod = solar_weather_timeseries.copy().reset_index()
+        solar_weather_timeseries_mod = (
+            solar_weather_timeseries_mod
+            .rename(columns={"dhi": "dhi_orig", "dni": "dni_orig", "ghi": "ghi_orig"})
+            .assign(dhi_adj=cloud_adjustments.reset_index().dhi_adj)
+            .assign(dni_adj=cloud_adjustments.reset_index().dni_adj)
+            .assign(ghi_adj=cloud_adjustments.reset_index().ghi_adj)
+            .set_index(solar_weather_timeseries.index)
+        )
+        solar_weather_timeseries_mod = (
+            solar_weather_timeseries_mod
+            .assign(
+                dhi=(solar_weather_timeseries_mod.dhi_clear * solar_weather_timeseries_mod.dhi_adj).fillna(solar_weather_timeseries_mod.dhi_orig),
+                dni=(solar_weather_timeseries_mod.dni_clear * solar_weather_timeseries_mod.dni_adj).fillna(solar_weather_timeseries_mod.dni_orig),
+                ghi=(solar_weather_timeseries_mod.ghi_clear * solar_weather_timeseries_mod.ghi_adj).fillna(solar_weather_timeseries_mod.ghi_orig),
+            )
+        )
+        pv_model_results_mod = simulate_pv_ouptput(
+            solar_weather_timeseries_mod,
+            latitude=lat,
+            longitude=lon,
+            altitude=0,
+            pv_array_tilt=lat,
+            pv_array_azimuth=180,
+            pv_panel_model=PV_PANEL_MODEL,
+            inverter_model=INVERTER_MODEL,
+        )
+        assert pv_model_results_mod.shape == pv_model_results.shape
+        pv_model_results = pv_model_results_mod
+    if limit_query is not None:
+        pv_model_results = pv_model_results.query(limit_query)
+    generation_kWh_year = pv_model_results["Inverter Output (Wh)"].sum() / 1000
+    generation_kWh_year_m2 = generation_kWh_year / PV_PANEL_MODEL.Area
+    if save_local_cache and not use_local_cache:
+        solar_weather_timeseries.to_csv(solar_weather_cache_file_name)
+        print(f"Wrote {solar_weather_cache_file_name}")
+        pv_model_results.to_csv(pv_cache_file_name)
+        print(f"Wrote {pv_cache_file_name}")
+    return generation_kWh_year_m2
 
 
 def generate_values_at_points(df):
@@ -226,21 +264,12 @@ def generate_values_at_points(df):
         point = (row.lat, row.lon)
         if i[6] % 50 == 0:
             print(f"i = {i[6]}")
-        try:
-            solar_generation_value = solar_potential(
-                point[0],
-                point[1],
-                use_local_cache=True,
-                save_local_cache=False,
-                )
-        except:
-            print(f"Cache miss at {point[0]} {point[1]}, computing from scratch.")
-            solar_generation_value = solar_potential(
-                point[0],
-                point[1],
-                use_local_cache=False,
-                save_local_cache=True,
-                )
+        solar_generation_value = solar_potential(
+            point[0],
+            point[1],
+            use_local_cache=True,
+            save_local_cache=True,
+            )
         generation_list += [(point[0], point[1], solar_generation_value, i[0])]
     generation_df = pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"]).dropna().reset_index()
     file_name = f"generation_{datetime_string()}.csv"
@@ -283,3 +312,44 @@ def save_as_geojson(geo_df, solar_df):
         json.dump(json_output, f)
         print(f"Saved to {file_name}")
     return True
+
+
+def simulate_for_constant_clouds(lat_source, lon_source, geo_df, limit_query=None):
+    solar_weather_cache_file_name_source = f"solar_local_cache/solar_weather_lat{lat_source}_lon{lon_source}.csv"
+    solar_weather_timeseries_source = pd.read_csv(
+        solar_weather_cache_file_name_source,
+        index_col=0,
+        )
+    solar_weather_timeseries_source.index = pd.to_datetime(
+        solar_weather_timeseries_source.index
+        )
+    cloud_adjustments = solar_weather_timeseries_source[[
+        "dhi", "dhi_clear", "dni", "dni_clear", "ghi", "ghi_clear",
+    ]].copy()
+    cloud_adjustments = (
+        cloud_adjustments
+        .assign(dhi_adj=cloud_adjustments.dhi / cloud_adjustments.dhi_clear)
+        .assign(dni_adj=cloud_adjustments.dni / cloud_adjustments.dni_clear)
+        .assign(ghi_adj=cloud_adjustments.ghi / cloud_adjustments.ghi_clear)
+    )
+    generation_list = []
+    for i, row in geo_df.iterrows():
+        # currently assuming specific format for CD dataset
+        point = (row.lat, row.lon)
+        if i[6] % 50 == 0:
+            print(f"i = {i[6]}")
+        solar_generation_value = solar_potential(
+            point[0],
+            point[1],
+            use_local_cache=True,
+            save_local_cache=False,
+            cloud_adjustments=cloud_adjustments,
+            limit_query=limit_query,
+            )
+        generation_list += [(point[0], point[1], solar_generation_value, i[0])]
+    generation_df = pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"]).dropna().reset_index()
+    file_name = f"generation_clouds_matching_lat{lat_source}_lon{lon_source}_{datetime_string()}.csv"
+    generation_df.to_csv(file_name)
+    print(f"Saved to {file_name}")
+    return generation_df
+
