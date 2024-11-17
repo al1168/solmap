@@ -153,6 +153,7 @@ def solar_potential(
     save_local_cache: bool,
     cloud_adjustments: pd.DataFrame = None,
     limit_query: str = None,
+    pv_array_tilt: float = None,
     ) -> float:
     """
     Take parameters specifying a real or simulated location. Return its yearly solar potential.
@@ -164,9 +165,8 @@ def solar_potential(
     Returns:
         generation (float): kWh/year/m2 of an optimally positioned solar panel
     """
-    load_dotenv()
-    NREL_API_KEY = os.getenv("NREL_API_KEY")
-    NREL_API_EMAIL = os.getenv("NREL_API_EMAIL")
+    if pv_array_tilt is None:
+        pv_array_tilt = lat
     solar_weather_cache_file_name = f"solar_local_cache/solar_weather_lat{lat}_lon{lon}.csv"
     pv_cache_file_name = f"solar_local_cache/pv_lat{lat}_lon{lon}.csv"
     if use_local_cache:
@@ -177,9 +177,20 @@ def solar_potential(
                 d.index = pd.to_datetime(d.index)
         except:
             print(f"Cache miss at {lat}, {lon}: computing from scratch.")
-            return solar_potential(lat, lon, False, save_local_cache)
+            return solar_potential(
+                lat,
+                lon,
+                False,
+                save_local_cache,
+                cloud_adjustments,
+                limit_query,
+                pv_array_tilt,
+                )
     else:
         try:
+            load_dotenv()
+            NREL_API_KEY = os.getenv("NREL_API_KEY")
+            NREL_API_EMAIL = os.getenv("NREL_API_EMAIL")
             solar_weather_timeseries, solar_weather_metadata = pvlib.iotools.get_psm3(
                 latitude=lat,
                 longitude=lon,
@@ -202,7 +213,7 @@ def solar_potential(
             latitude=lat,
             longitude=lon,
             altitude=0,
-            pv_array_tilt=lat,
+            pv_array_tilt=pv_array_tilt,
             pv_array_azimuth=180,
             pv_panel_model=PV_PANEL_MODEL,
             inverter_model=INVERTER_MODEL,
@@ -226,12 +237,17 @@ def solar_potential(
                 ghi=(solar_weather_timeseries_mod.ghi_clear * solar_weather_timeseries_mod.ghi_adj).fillna(solar_weather_timeseries_mod.ghi_orig),
             )
         )
+        solar_weather_timeseries = solar_weather_timeseries_mod
+    if (
+        cloud_adjustments is not None
+        or pv_array_tilt is not None
+        ):
         pv_model_results_mod = simulate_pv_ouptput(
-            solar_weather_timeseries_mod,
+            solar_weather_timeseries,
             latitude=lat,
             longitude=lon,
             altitude=0,
-            pv_array_tilt=lat,
+            pv_array_tilt=pv_array_tilt,
             pv_array_azimuth=180,
             pv_panel_model=PV_PANEL_MODEL,
             inverter_model=INVERTER_MODEL,
@@ -250,7 +266,10 @@ def solar_potential(
     return generation_kWh_year_m2
 
 
-def generate_values_at_points(df):
+def generate_values_at_points(
+    df,
+    pv_array_tilt=None,
+    ):
     """
     Args:
         df (pd.DataFrame): points to fetch solar potential at
@@ -262,13 +281,14 @@ def generate_values_at_points(df):
     for i, row in df.iterrows():
         # currently assuming specific format for CD dataset
         point = (row.lat, row.lon)
-        if i[6] % 50 == 0:
+        if i[6] % 100 == 0:
             print(f"i = {i[6]}")
         solar_generation_value = solar_potential(
             point[0],
             point[1],
             use_local_cache=True,
             save_local_cache=True,
+            pv_array_tilt=pv_array_tilt,
             )
         generation_list += [(point[0], point[1], solar_generation_value, i[0])]
     generation_df = pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"]).dropna().reset_index()
@@ -278,19 +298,24 @@ def generate_values_at_points(df):
     return generation_df
 
 
-def save_as_geojson(geo_df, solar_df):
+def save_as_geojson(geo_df, solar_df_dict):
     json_output = {"type": "FeatureCollection", "features": []}
     # currently assuming specific format for CD dataset
     # and for "real" generation
     missing_value_count = 0
     for i, row in geo_df.iterrows():
-        g = solar_df[solar_df.GEO_ID == i[0]]
-        if g.shape[0] == 0:
-            missing_value_count += 1
-            continue
-        assert g.shape[0] == 1
-        assert g.lat.values[0] == row.lat
-        assert g.lon.values[0] == row.lon
+        value_dict = {}
+        for solar_name, solar_df in solar_df_dict.items():
+            g = solar_df[solar_df.GEO_ID == i[0]]
+            if g.shape[0] == 0:
+                missing_value_count += 1
+                value = None
+            else:
+                assert g.shape[0] == 1
+                assert g.lat.values[0] == row.lat
+                assert g.lon.values[0] == row.lon
+                value = g.generation.values[0]
+            value_dict[solar_name] = value
         this_feature = {
             "type": "Feature",
             "properties": {
@@ -300,8 +325,7 @@ def save_as_geojson(geo_df, solar_df):
                 "NAME": i[3],
                 "LSAD": i[4],
                 "CENSUSAREA": i[5],
-                "generation_real": g.generation.values[0],
-            },
+            } | value_dict,
             "geometry": {"type": "Point", "coordinates": [row.lon, row.lat]},
         }
         json_output["features"] += [this_feature]
@@ -314,7 +338,15 @@ def save_as_geojson(geo_df, solar_df):
     return True
 
 
-def simulate_for_constant_clouds(lat_source, lon_source, geo_df, limit_query=None):
+def simulate_for_constant_clouds(
+    lat_source,
+    lon_source,
+    geo_df,
+    limit_query=None,
+    pv_array_tilt=None,
+    ):
+    if pv_array_tilt is None:
+        pv_array_tilt = lat_source
     solar_weather_cache_file_name_source = f"solar_local_cache/solar_weather_lat{lat_source}_lon{lon_source}.csv"
     solar_weather_timeseries_source = pd.read_csv(
         solar_weather_cache_file_name_source,
@@ -336,7 +368,7 @@ def simulate_for_constant_clouds(lat_source, lon_source, geo_df, limit_query=Non
     for i, row in geo_df.iterrows():
         # currently assuming specific format for CD dataset
         point = (row.lat, row.lon)
-        if i[6] % 50 == 0:
+        if i[6] % 100 == 0:
             print(f"i = {i[6]}")
         solar_generation_value = solar_potential(
             point[0],
@@ -345,11 +377,11 @@ def simulate_for_constant_clouds(lat_source, lon_source, geo_df, limit_query=Non
             save_local_cache=False,
             cloud_adjustments=cloud_adjustments,
             limit_query=limit_query,
+            pv_array_tilt=pv_array_tilt,
             )
         generation_list += [(point[0], point[1], solar_generation_value, i[0])]
     generation_df = pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"]).dropna().reset_index()
-    file_name = f"generation_clouds_matching_lat{lat_source}_lon{lon_source}_{datetime_string()}.csv"
+    file_name = f"generation_clouds_matching_lat{lat_source}_lon{lon_source}_tilt{pv_array_tilt}_{datetime_string()}.csv"
     generation_df.to_csv(file_name)
     print(f"Saved to {file_name}")
     return generation_df
-
