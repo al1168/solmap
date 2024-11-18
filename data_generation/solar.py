@@ -100,49 +100,43 @@ def simulate_pv_ouptput(
         total_irradiance_timeseries["poa_global"],
         solar_weather_timeseries["temp_air"],
         solar_weather_timeseries["wind_speed"],
-        **pvlib.temperature.TEMPERATURE_MODEL_PARAMETERS["sapm"]["open_rack_glass_glass"],
+        **pvlib.temperature.TEMPERATURE_MODEL_PARAMETERS["sapm"][
+            "open_rack_glass_glass"
+        ],
     )
 
     # Finally we put it all together:
 
     # We simulate the DC electricity output of our PV panel given the effective solar irradiance and cell temperature)
     dc_electricity_timeseries = pvlib.pvsystem.sapm(
-        effective_irradiance_timeseries, 
-        cell_temperature_timeseries, 
-        pv_panel_model
+        effective_irradiance_timeseries, cell_temperature_timeseries, pv_panel_model
     )
 
     # And then we simulate the inverter converting the DC output into AC output
     ac_electricity_timeseries_watts = pvlib.inverter.sandia(
-        dc_electricity_timeseries["v_mp"], 
-        dc_electricity_timeseries["p_mp"], 
-        inverter_model
+        dc_electricity_timeseries["v_mp"],
+        dc_electricity_timeseries["p_mp"],
+        inverter_model,
     )
 
     # Wrap the results all up into a dataframe for plotting!
     pv_model_results = pd.DataFrame(
         {
-            "PV Array Output (Wh)": dc_electricity_timeseries["i_mp"] * dc_electricity_timeseries["v_mp"],
+            "PV Array Output (Wh)": dc_electricity_timeseries["i_mp"]
+            * dc_electricity_timeseries["v_mp"],
             "Inverter Output (Wh)": ac_electricity_timeseries_watts,
             "Solar azimuth (°)": solar_position_timeseries["azimuth"],
             "Solar elevation (°)": solar_position_timeseries["apparent_elevation"],
         }
     )
     pv_model_results["timestamp"] = pv_model_results.index.map(
-        lambda utc_time: utc_time.astimezone(pytz.timezone('UTC'))
+        lambda utc_time: utc_time.astimezone(pytz.timezone("UTC"))
     )
     return pv_model_results
 
 
 def datetime_string():
-    s = (
-        datetime
-        .now()
-        .isoformat()
-        .replace('-','_')
-        .replace(':','_')
-        .replace('.','_')
-        )
+    s = datetime.now().isoformat().replace("-", "_").replace(":", "_").replace(".", "_")
     return s
 
 
@@ -154,7 +148,7 @@ def solar_potential(
     cloud_adjustments: pd.DataFrame = None,
     limit_query: str = None,
     pv_array_tilt: float = None,
-    ) -> float:
+) -> float:
     """
     Take parameters specifying a real or simulated location. Return its yearly solar potential.
 
@@ -167,11 +161,15 @@ def solar_potential(
     """
     if pv_array_tilt is None:
         pv_array_tilt = lat
-    solar_weather_cache_file_name = f"solar_local_cache/solar_weather_lat{lat}_lon{lon}.csv"
+    solar_weather_cache_file_name = (
+        f"solar_local_cache/solar_weather_lat{lat}_lon{lon}.csv"
+    )
     pv_cache_file_name = f"solar_local_cache/pv_lat{lat}_lon{lon}.csv"
     if use_local_cache:
         try:
-            solar_weather_timeseries = pd.read_csv(solar_weather_cache_file_name, index_col=0)
+            solar_weather_timeseries = pd.read_csv(
+                solar_weather_cache_file_name, index_col=0
+            )
             pv_model_results = pd.read_csv(pv_cache_file_name, index_col=0)
             for d in [solar_weather_timeseries, pv_model_results]:
                 d.index = pd.to_datetime(d.index)
@@ -185,7 +183,7 @@ def solar_potential(
                 cloud_adjustments,
                 limit_query,
                 pv_array_tilt,
-                )
+            )
     else:
         try:
             load_dotenv()
@@ -207,7 +205,7 @@ def solar_potential(
         except:
             print(f"Other error for {lat}, {lon}")
             return None
-        #warnings.warn("All altitudes are set to 0.")
+        # warnings.warn("All altitudes are set to 0.")
         pv_model_results = simulate_pv_ouptput(
             solar_weather_timeseries,
             latitude=lat,
@@ -222,26 +220,30 @@ def solar_potential(
         assert cloud_adjustments.shape[0] == solar_weather_timeseries.shape[0]
         solar_weather_timeseries_mod = solar_weather_timeseries.copy().reset_index()
         solar_weather_timeseries_mod = (
-            solar_weather_timeseries_mod
-            .rename(columns={"dhi": "dhi_orig", "dni": "dni_orig", "ghi": "ghi_orig"})
+            solar_weather_timeseries_mod.rename(
+                columns={"dhi": "dhi_orig", "dni": "dni_orig", "ghi": "ghi_orig"}
+            )
             .assign(dhi_adj=cloud_adjustments.reset_index().dhi_adj)
             .assign(dni_adj=cloud_adjustments.reset_index().dni_adj)
             .assign(ghi_adj=cloud_adjustments.reset_index().ghi_adj)
             .set_index(solar_weather_timeseries.index)
         )
-        solar_weather_timeseries_mod = (
-            solar_weather_timeseries_mod
-            .assign(
-                dhi=(solar_weather_timeseries_mod.dhi_clear * solar_weather_timeseries_mod.dhi_adj).fillna(solar_weather_timeseries_mod.dhi_orig),
-                dni=(solar_weather_timeseries_mod.dni_clear * solar_weather_timeseries_mod.dni_adj).fillna(solar_weather_timeseries_mod.dni_orig),
-                ghi=(solar_weather_timeseries_mod.ghi_clear * solar_weather_timeseries_mod.ghi_adj).fillna(solar_weather_timeseries_mod.ghi_orig),
-            )
+        solar_weather_timeseries_mod = solar_weather_timeseries_mod.assign(
+            dhi=(
+                solar_weather_timeseries_mod.dhi_clear
+                * solar_weather_timeseries_mod.dhi_adj
+            ).fillna(solar_weather_timeseries_mod.dhi_orig),
+            dni=(
+                solar_weather_timeseries_mod.dni_clear
+                * solar_weather_timeseries_mod.dni_adj
+            ).fillna(solar_weather_timeseries_mod.dni_orig),
+            ghi=(
+                solar_weather_timeseries_mod.ghi_clear
+                * solar_weather_timeseries_mod.ghi_adj
+            ).fillna(solar_weather_timeseries_mod.ghi_orig),
         )
         solar_weather_timeseries = solar_weather_timeseries_mod
-    if (
-        cloud_adjustments is not None
-        or pv_array_tilt is not None
-        ):
+    if cloud_adjustments is not None or pv_array_tilt is not None:
         pv_model_results_mod = simulate_pv_ouptput(
             solar_weather_timeseries,
             latitude=lat,
@@ -269,7 +271,7 @@ def solar_potential(
 def generate_values_at_points(
     df,
     pv_array_tilt=None,
-    ):
+):
     """
     Args:
         df (pd.DataFrame): points to fetch solar potential at
@@ -289,9 +291,13 @@ def generate_values_at_points(
             use_local_cache=True,
             save_local_cache=True,
             pv_array_tilt=pv_array_tilt,
-            )
+        )
         generation_list += [(point[0], point[1], solar_generation_value, i[0])]
-    generation_df = pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"]).dropna().reset_index()
+    generation_df = (
+        pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"])
+        .dropna()
+        .reset_index()
+    )
     file_name = f"generation_{datetime_string()}.csv"
     generation_df.to_csv(file_name)
     print(f"Saved to {file_name}")
@@ -325,14 +331,15 @@ def save_as_geojson(geo_df, solar_df_dict):
                 "NAME": i[3],
                 "LSAD": i[4],
                 "CENSUSAREA": i[5],
-            } | value_dict,
+            }
+            | value_dict,
             "geometry": {"type": "Point", "coordinates": [row.lon, row.lat]},
         }
         json_output["features"] += [this_feature]
     if missing_value_count > 0:
         print(f"Missing values for {missing_value_count} geos, continuing.")
-    file_name = f'solar_points_{datetime_string()}.json'
-    with open(file_name, 'w') as f:
+    file_name = f"solar_points_{datetime_string()}.json"
+    with open(file_name, "w") as f:
         json.dump(json_output, f)
         print(f"Saved to {file_name}")
     return True
@@ -344,23 +351,33 @@ def simulate_for_constant_clouds(
     geo_df,
     limit_query=None,
     pv_array_tilt=None,
-    ):
+):
     if pv_array_tilt is None:
         pv_array_tilt = lat_source
-    solar_weather_cache_file_name_source = f"solar_local_cache/solar_weather_lat{lat_source}_lon{lon_source}.csv"
+    solar_weather_cache_file_name_source = (
+        f"solar_local_cache/solar_weather_lat{lat_source}_lon{lon_source}.csv"
+    )
     solar_weather_timeseries_source = pd.read_csv(
         solar_weather_cache_file_name_source,
         index_col=0,
-        )
+    )
     solar_weather_timeseries_source.index = pd.to_datetime(
         solar_weather_timeseries_source.index
-        )
-    cloud_adjustments = solar_weather_timeseries_source[[
-        "dhi", "dhi_clear", "dni", "dni_clear", "ghi", "ghi_clear",
-    ]].copy()
+    )
+    cloud_adjustments = solar_weather_timeseries_source[
+        [
+            "dhi",
+            "dhi_clear",
+            "dni",
+            "dni_clear",
+            "ghi",
+            "ghi_clear",
+        ]
+    ].copy()
     cloud_adjustments = (
-        cloud_adjustments
-        .assign(dhi_adj=cloud_adjustments.dhi / cloud_adjustments.dhi_clear)
+        cloud_adjustments.assign(
+            dhi_adj=cloud_adjustments.dhi / cloud_adjustments.dhi_clear
+        )
         .assign(dni_adj=cloud_adjustments.dni / cloud_adjustments.dni_clear)
         .assign(ghi_adj=cloud_adjustments.ghi / cloud_adjustments.ghi_clear)
     )
@@ -378,9 +395,13 @@ def simulate_for_constant_clouds(
             cloud_adjustments=cloud_adjustments,
             limit_query=limit_query,
             pv_array_tilt=pv_array_tilt,
-            )
+        )
         generation_list += [(point[0], point[1], solar_generation_value, i[0])]
-    generation_df = pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"]).dropna().reset_index()
+    generation_df = (
+        pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"])
+        .dropna()
+        .reset_index()
+    )
     file_name = f"generation_clouds_matching_lat{lat_source}_lon{lon_source}_tilt{pv_array_tilt}_{datetime_string()}.csv"
     generation_df.to_csv(file_name)
     print(f"Saved to {file_name}")
