@@ -328,7 +328,7 @@ def save_as_geojson(geo_df, solar_df_dict):
                 "GEO_ID": i[0],
                 "STATE": i[1],
                 "CD": i[2],
-                "NAME": i[3],
+                "NAME": str(i[3]),
                 "LSAD": i[4],
                 "CENSUSAREA": i[5],
             }
