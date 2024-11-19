@@ -1,14 +1,23 @@
 // import { Feature } from "geojson";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { MapContainer, TileLayer, useMap, GeoJSON } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import markerIconPng from "leaflet/dist/images/marker-icon.png";
 import markerShadowPng from "leaflet/dist/images/marker-shadow.png";
 import statesData from "../Constants/congstates";
-import generation_points from "../Constants/real_generation_points";
 import mergeGeoJSONByID from "../Lib/Map/mergeGeoJSON";
+import solardata from "../Constants/Solardata";
 import fipsToState from "../Constants/FipsCodeToStateName";
+import * as d3 from "d3-scale";
+import { interpolateTurbo } from "d3-scale-chromatic";
+import {
+  RadioGroup,
+  Radio,
+  Select,
+  SelectItem,
+  Avatar,
+} from "@nextui-org/react";
 let DefaultIcon = L.icon({
   iconUrl: markerIconPng,
   shadowUrl: markerShadowPng,
@@ -18,75 +27,92 @@ let DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-const usBounds = L.latLngBounds(
-  [24.396308, -125.0], // Southwest corner
-  [49.384358, -66.93457] // Northeast corner
-);
-
-function getColor(d: number): string {
-  return d > 270
-    ? "#FF0000" // Bright red
-    : d > 250
-    ? "#FF4500" // Orange-red
-    : d > 230
-    ? "#FFA500" // Orange
-    : d > 210
-    ? "#FFD700" // Gold
-    : d > 190
-    ? "#FFFF00" // Yellow
-    : d > 170
-    ? "#87CEEB" // Sky blue
-    : "#0000FF"; // Deep blue
-}
-
-function style(feature: any) {
-  return {
-    fillColor: getColor(feature.properties.generation_real),
-    weight: 2.5,
-    // opacity: 1,
-    color: "black",
-    // dashArray: "3",
-    fillOpacity: 0.7,
-  };
-}
-
-function highlightFeature(e: L.LeafletMouseEvent) {
-  const layer = e.target;
-
-  layer.setStyle({
-    weight: 10,
-    color: "purple",
-    // dashArray: "",
-    // fillOpacity: 0.7,
-  });
-
-  const { generation_real, CD, STATE } = layer.feature.properties;
-  layer.bindTooltip(
-    `<strong> District: ${CD}, ${fipsToState[Number(STATE)]}</strong><br>Generation Real: ${generation_real}`,
-    {
-      permanent: false,
-      direction: "top",
-      offset: L.point(0, -10),
-      className: "custom-tooltip"
-    }
-  ).openTooltip(e.latlng);
-
-
-}
-
-function resetHighlight(e: L.LeafletMouseEvent) {
-  const layer = e.target;
-  layer.setStyle(style(layer.feature));
-}
-
 function LeafletMap() {
   const [data, setData] = useState<any>(statesData);
+  const [baseFactor, setBaseFactor] = useState<string>("generation_real");
+  const [viewMode, setViewMode] = useState<string>("tilted");
+  const [finalFactor, setFinalFactor] = useState<string>(
+    baseFactor + (viewMode === "horizontal" ? "_horizontal" : "")
+  );
+
   useEffect(() => {
     // add points to polygon
     // @ts-ignore
-    const merged_data = mergeGeoJSONByID(statesData, generation_points);
+    const merged_data = mergeGeoJSONByID(statesData, solardata);
     setData(merged_data);
   }, []);
+
+  const usBounds = L.latLngBounds(
+    [24.396308, -125.0], // Southwest corner
+    [49.384358, -66.93457] // Northeast corner
+  );
+
+  // Create a dynamic color scale for smoother transitions
+  const colorScale = d3.scaleSequential(interpolateTurbo).domain([170, 270]); // Adjust domain range as needed
+
+  useEffect(() => {
+    setFinalFactor(
+      baseFactor + (viewMode === "horizontal" ? "_horizontal" : "")
+    );
+  }, [baseFactor, viewMode]);
+
+  const style = useCallback(
+    (feature: any) => {
+      function getColor(d: number): string {
+        const clampedValue = Math.min(Math.max(d, 140), 270);
+        return colorScale(clampedValue).toString();
+      }
+
+      const property = feature.properties[finalFactor];
+      return {
+        fillColor: getColor(property || 0),
+        weight: 2.5,
+        color: "black",
+        fillOpacity: 0.7,
+      };
+    },
+    [finalFactor] // `getColor` is now internal, so no need to include it here
+  );
+  function highlightFeature(e: L.LeafletMouseEvent) {
+    const layer = e.target;
+
+    layer.setStyle({
+      weight: 10,
+      color: "purple",
+      // dashArray: "",
+      // fillOpacity: 0.7,
+    });
+
+    // Declare and assign `finalfactor` before using it
+    const { CD, STATE } = layer.feature.properties;
+
+    // Safely use `finalfactor` to access the appropriate property
+    const generationValue = layer.feature.properties[finalFactor] ?? "Unknown";
+
+    layer
+      .bindTooltip(
+        `<strong> District: ${CD}, ${
+          fipsToState[Number(STATE)]
+        }</strong><br>${finalFactor}: ${generationValue}`,
+        {
+          permanent: false,
+          direction: "top",
+          offset: L.point(0, -10),
+          className: "custom-tooltip",
+        }
+      )
+      .openTooltip(e.latlng);
+  }
+
+  const resetHighlight = useCallback(
+    (e: L.LeafletMouseEvent) => {
+      const layer = e.target;
+      const feature = layer.feature; // Access the feature
+      layer.setStyle(style(feature)); // Apply the correct style dynamically
+    },
+    [style] // Dependency to ensure the style is up-to-date
+  );
+
   function onEachFeature(feature: any, layer: L.Layer) {
     layer.on({
       mouseover: highlightFeature,
@@ -97,7 +123,6 @@ function LeafletMap() {
 
         const generationReal = feature.properties.generation_real;
         console.log("Generation Real:", generationReal);
-
       },
     });
   }
@@ -111,7 +136,7 @@ function LeafletMap() {
     const map = useMap();
 
     useEffect(() => {
-      map.invalidateSize(); 
+      map.invalidateSize();
       map.on("click", handleMapClick);
 
       return () => {
@@ -121,29 +146,159 @@ function LeafletMap() {
 
     return null;
   }
+  const handleBaseFactorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setBaseFactor(e.target.value);
+  };
+
+  const Legend = ({
+    colorScale,
+  }: {
+    colorScale: d3.ScaleSequential<string, never>;
+  }) => {
+    const map = useMap();
+
+    useEffect(() => {
+      const legendControl = new L.Control({ position: "topright" });
+
+      legendControl.onAdd = () => {
+        const div = L.DomUtil.create(
+          "div",
+          "info legend bg-white p-4 rounded shadow-md text-gray-700 text-sm"
+        );
+        const [min, max] = colorScale.domain(); // Get the scale domain
+        const steps = 6; // Number of legend steps
+        const ticks = Array.from(
+          { length: steps + 1 },
+          (_, i) => min + (i * (max - min)) / steps
+        );
+
+        // Create labels with colors
+        const labels = ticks.map(
+          (tick: d3.NumberValue) =>
+            `<div class="flex items-center mb-1">
+              <span class="inline-block w-5 h-5 mr-2 rounded-sm" style="background:${colorScale(
+                tick
+              )};"></span>
+              <span>${Math.round(Number(tick))}</span>
+            </div>`
+        );
+
+        // Add title and labels
+        div.innerHTML = `
+          <h4 class="font-semibold mb-2">Legend</h4>
+          ${labels.join("")}
+        `;
+        return div;
+      };
+
+      legendControl.addTo(map);
+
+      return () => {
+        legendControl.remove();
+      };
+    }, [map, colorScale]);
+
+    return null;
+  };
 
   return (
-    <MapContainer
-      style={{ height: "100vh", width: "100%" }}
-      center={[38.7946, -106.5348]}
-      zoom={5}
-      scrollWheelZoom={true}
-      // maxBounds={usBounds}
-      // minZoom={4}
-      // maxZoom={6}
-    >
-      <HandleResizeAndClick />
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <GeoJSON
-        key={JSON.stringify(data)}
-        data={data}
-        style={style}
-        onEachFeature={onEachFeature}
-      />
-    </MapContainer>
+    <div className="flex-col">
+      <div>
+        <Select
+          className="max-w-xs"
+          label="Select a State"
+          onSelectionChange={(key) =>
+            setBaseFactor(Array.from(key)[0] as string)
+          }
+        >
+          <SelectItem
+            key="generation_real"
+            startContent={
+              <Avatar
+                alt="USA"
+                className="w-6 h-6"
+                src="https://flagcdn.com/us.svg"
+              />
+            }
+          >
+            No State
+          </SelectItem>
+          <SelectItem
+            key="generation_texas_clouds"
+            startContent={
+              <Avatar
+                alt="Texas"
+                className="w-6 h-6"
+                src="https://flagcdn.com/us-tx.svg"
+              />
+            }
+          >
+            Texas
+          </SelectItem>
+          <SelectItem
+            key="generation_ny_clouds"
+            startContent={
+              <Avatar
+                alt="Venezuela"
+                className="w-6 h-6"
+                src="https://flagcdn.com/us-ny.svg"
+              />
+            }
+          >
+            New York
+          </SelectItem>
+          <SelectItem
+            key="generation_wash_clouds"
+            startContent={
+              <Avatar
+                alt="Washington"
+                className="w-6 h-6"
+                src="https://flagcdn.com/us-wa.svg"
+              />
+            }
+          >
+            Washington
+          </SelectItem>
+        </Select>
+
+        <div>
+          <RadioGroup label="Orientation" orientation="horizontal">
+            <Radio value="tilted" onChange={() => setViewMode("tilted")}>
+              Tilted
+            </Radio>
+            <Radio
+              value="horizontal"
+              onChange={() => setViewMode("horizontal")}
+            >
+              Horizontal
+            </Radio>
+          </RadioGroup>
+        </div>
+      </div>
+
+      <MapContainer
+        style={{ height: "100vh", width: "100%" }}
+        center={[38.7946, -106.5348]}
+        zoom={5}
+        scrollWheelZoom={true}
+        // maxBounds={usBounds}
+        // minZoom={4}
+        // maxZoom={6}
+      >
+        <HandleResizeAndClick />
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <Legend colorScale={colorScale} />
+        <GeoJSON
+          key={finalFactor}
+          data={data}
+          style={style}
+          onEachFeature={onEachFeature}
+        />
+      </MapContainer>
+    </div>
   );
 }
 

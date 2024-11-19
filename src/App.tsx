@@ -1,12 +1,14 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
-import LeafletMap from './Components/LeafletMap';
+import "./App.css";
+import LeafletMap from "./Components/LeafletMap";
 
-
+import { NextUIProvider } from "@nextui-org/react";
 function App() {
   return (
-    <LeafletMap />
+    <NextUIProvider>
+      <div className="map-wrapper container mx-auto">
+        <LeafletMap />
+      </div>
+    </NextUIProvider>
   );
 }
 
