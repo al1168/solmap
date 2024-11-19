@@ -406,3 +406,50 @@ def simulate_for_constant_clouds(
     generation_df.to_csv(file_name)
     print(f"Saved to {file_name}")
     return generation_df
+
+
+def make_timeseries(lat, lon):
+    pv_detail = pd.read_csv(
+        f"solar_local_cache/pv_lat{lat}_lon{lon}.csv",
+        index_col=0,
+        parse_dates=["timestamp"],
+    )
+    pv_detail = pv_detail.assign(date=pv_detail.timestamp.dt.date)
+    pv_detail = pv_detail.assign(
+        week=pd.to_datetime(pv_detail.date).dt.to_period("W-MON")
+    )
+    pv_summary = (
+        pv_detail.groupby("date", as_index=False)
+        .agg(
+            date_energy=("Inverter Output (Wh)", "sum"),
+            date_count=("Inverter Output (Wh)", "count"),
+            date_std=("Inverter Output (Wh)", "std"),
+            week=("week", "min"),
+        )
+        .groupby("week")
+        .agg(
+            energy_per_day=("date_energy", "mean"),
+            day_count=("date_energy", "count"),
+            energy_per_day_std=("date_energy", "std"),
+        )
+        .head(52)
+    )
+    pv_summary = pv_summary.assign(
+        energy_uncert_hi=pv_summary.energy_per_day + pv_summary.energy_per_day_std,
+        energy_uncert_lo=pv_summary.energy_per_day - pv_summary.energy_per_day_std,
+    )
+    ax = pv_summary.plot(
+        y=["energy_per_day"],
+    )
+    ax.fill_between(
+        pv_summary.index,
+        pv_summary.energy_uncert_hi,
+        pv_summary.energy_uncert_lo,
+        alpha=0.3,
+    )
+    ax.set_ylim([0, (pv_summary.energy_per_day + pv_summary.energy_per_day_std).max()])
+    ax.set_title(f"{lat:0.5f}, {lon:0.5f}")
+    file_name = f"timeseries_lat{lat}_lon{lon}.csv"
+    pv_summary.to_csv(file_name)
+    print(f"Werote {file_name}")
+    return ax
