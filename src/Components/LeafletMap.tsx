@@ -47,7 +47,7 @@ function LeafletMap() {
   );
 
   // Create a dynamic color scale for smoother transitions
-  const colorScale = d3.scaleSequential(interpolateTurbo).domain([170, 270]);
+  const colorScale = d3.scaleSequential(interpolateTurbo).domain([130, 270]);
 
   useEffect(() => {
     setFinalFactor(
@@ -58,14 +58,14 @@ function LeafletMap() {
   const style = useCallback(
     (feature: any) => {
       function getColor(d: number): string {
-        const clampedValue = Math.min(Math.max(d, 140), 270);
+        const clampedValue = Math.min(Math.max(d, 130), 270);
         return colorScale(clampedValue).toString();
       }
 
       const property = feature.properties[finalFactor];
       return {
         fillColor: getColor(property || 0),
-        weight: 2.5,
+        weight: 1,
         color: "black",
         fillOpacity: 0.7,
       };
