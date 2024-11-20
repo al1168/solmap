@@ -1,4 +1,3 @@
-// import { Feature } from "geojson";
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { MapContainer, TileLayer, useMap, GeoJSON } from "react-leaflet";
 import L from "leaflet";
@@ -48,7 +47,7 @@ function LeafletMap() {
   );
 
   // Create a dynamic color scale for smoother transitions
-  const colorScale = d3.scaleSequential(interpolateTurbo).domain([170, 270]); // Adjust domain range as needed
+  const colorScale = d3.scaleSequential(interpolateTurbo).domain([170, 270]);
 
   useEffect(() => {
     setFinalFactor(
@@ -71,7 +70,7 @@ function LeafletMap() {
         fillOpacity: 0.7,
       };
     },
-    [finalFactor] // `getColor` is now internal, so no need to include it here
+    [finalFactor]
   );
   function highlightFeature(e: L.LeafletMouseEvent) {
     const layer = e.target;
@@ -79,21 +78,16 @@ function LeafletMap() {
     layer.setStyle({
       weight: 10,
       color: "purple",
-      // dashArray: "",
-      // fillOpacity: 0.7,
     });
 
-    // Declare and assign `finalfactor` before using it
     const { CD, STATE } = layer.feature.properties;
-
-    // Safely use `finalfactor` to access the appropriate property
     const generationValue = layer.feature.properties[finalFactor] ?? "Unknown";
 
     layer
       .bindTooltip(
         `<strong> District: ${CD}, ${
           fipsToState[Number(STATE)]
-        }</strong><br>${finalFactor}: ${generationValue}`,
+        }</strong><br>${finalFactor}: ${generationValue} KWHs`,
         {
           permanent: false,
           direction: "top",
@@ -107,10 +101,10 @@ function LeafletMap() {
   const resetHighlight = useCallback(
     (e: L.LeafletMouseEvent) => {
       const layer = e.target;
-      const feature = layer.feature; // Access the feature
-      layer.setStyle(style(feature)); // Apply the correct style dynamically
+      const feature = layer.feature;
+      layer.setStyle(style(feature));
     },
-    [style] // Dependency to ensure the style is up-to-date
+    [style]
   );
 
   function onEachFeature(feature: any, layer: L.Layer) {
@@ -146,9 +140,6 @@ function LeafletMap() {
 
     return null;
   }
-  const handleBaseFactorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setBaseFactor(e.target.value);
-  };
 
   const Legend = ({
     colorScale,
@@ -158,7 +149,7 @@ function LeafletMap() {
     const map = useMap();
 
     useEffect(() => {
-      const legendControl = new L.Control({ position: "topright" });
+      const legendControl = new L.Control({ position: "bottomright" });
 
       legendControl.onAdd = () => {
         const div = L.DomUtil.create(
@@ -171,8 +162,6 @@ function LeafletMap() {
           { length: steps + 1 },
           (_, i) => min + (i * (max - min)) / steps
         );
-
-        // Create labels with colors
         const labels = ticks.map(
           (tick: d3.NumberValue) =>
             `<div class="flex items-center mb-1">
@@ -187,6 +176,7 @@ function LeafletMap() {
         div.innerHTML = `
           <h4 class="font-semibold mb-2">Legend</h4>
           ${labels.join("")}
+          <h4 class="font-semibold mb-2"> Kilowatt Hours</h4>
         `;
         return div;
       };
@@ -239,7 +229,7 @@ function LeafletMap() {
             key="generation_ny_clouds"
             startContent={
               <Avatar
-                alt="Venezuela"
+                alt="NY"
                 className="w-6 h-6"
                 src="https://flagcdn.com/us-ny.svg"
               />
@@ -262,28 +252,25 @@ function LeafletMap() {
         </Select>
 
         <div>
-          <RadioGroup label="Orientation" orientation="horizontal">
-            <Radio value="tilted" onChange={() => setViewMode("tilted")}>
-              Tilted
-            </Radio>
-            <Radio
-              value="horizontal"
-              onChange={() => setViewMode("horizontal")}
-            >
-              Horizontal
-            </Radio>
+          <RadioGroup
+            label="Orientation"
+            orientation="horizontal"
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value)}
+          >
+            <Radio value="tilted">Tilted</Radio>
+            <Radio value="horizontal">Horizontal</Radio>
           </RadioGroup>
         </div>
       </div>
 
       <MapContainer
-        style={{ height: "100vh", width: "100%" }}
-        center={[38.7946, -106.5348]}
+        center={[38.76265, -94.396089]}
         zoom={5}
         scrollWheelZoom={true}
+        className="border-double border-5 border-indigo-500 rounded-xl w-[80vw] h-[80vh]"
         // maxBounds={usBounds}
-        // minZoom={4}
-        // maxZoom={6}
+        minZoom={4}
       >
         <HandleResizeAndClick />
         <TileLayer
