@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 import pvlib
 import pytz
@@ -30,6 +31,10 @@ SOLAR_WEATHER_ATTRIBUTES = (
     "wind_direction",
     "wind_speed",
 )
+
+POINTS_TO_SKIP = [
+    (58.63942421657351, -141.66555845649208),
+]
 
 
 def simulate_pv_ouptput(
@@ -160,6 +165,8 @@ def solar_potential(
     Returns:
         generation (float): kWh/year/m2 of an optimally positioned solar panel
     """
+    if (lat, lon) in POINTS_TO_SKIP:
+        return None
     if pv_array_tilt is None:
         pv_array_tilt = lat
     solar_weather_cache_file_name = (
@@ -281,11 +288,10 @@ def generate_values_at_points(
         generation_df (float): kWh/year/m2 at each point
     """
     generation_list = []
-    for i, row in df.iterrows():
-        # currently assuming specific format for CD dataset
+    for i, row in enumerate(df.itertuples()):
         point = (row.lat, row.lon)
-        if i[6] % 100 == 0:
-            print(f"i = {i[6]}")
+        if i % 100 == 0:
+            print(f"{i=}")
         solar_generation_value = solar_potential(
             point[0],
             point[1],
@@ -293,13 +299,15 @@ def generate_values_at_points(
             save_local_cache=True,
             pv_array_tilt=pv_array_tilt,
         )
-        generation_list += [(point[0], point[1], solar_generation_value, i[0])]
+        generation_list += [(point[0], point[1], solar_generation_value, row.Index)]
     generation_df = (
-        pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"])
+        pd.DataFrame(
+            generation_list, columns=["lat", "lon", "generation", "geometry_name"]
+        )
         .dropna()
         .reset_index()
     )
-    file_name = f"generation_{datetime_string()}.csv"
+    file_name = f"output_csv/generation_{datetime_string()}.csv"
     generation_df.to_csv(file_name)
     print(f"Saved to {file_name}")
     return generation_df
@@ -307,13 +315,11 @@ def generate_values_at_points(
 
 def save_as_geojson(geo_df, solar_df_dict):
     json_output = {"type": "FeatureCollection", "features": []}
-    # currently assuming specific format for CD dataset
-    # and for "real" generation
     missing_value_count = 0
-    for i, row in geo_df.iterrows():
+    for i, row in enumerate(geo_df.itertuples()):
         value_dict = {}
         for solar_name, solar_df in solar_df_dict.items():
-            g = solar_df[solar_df.GEO_ID == i[0]]
+            g = solar_df[solar_df.geometry_name == row.Index]
             if g.shape[0] == 0:
                 missing_value_count += 1
                 value = None
@@ -321,17 +327,12 @@ def save_as_geojson(geo_df, solar_df_dict):
                 assert g.shape[0] == 1
                 assert g.lat.values[0] == row.lat
                 assert g.lon.values[0] == row.lon
-                value = g.generation.values[0]
+                value = np.round(g.generation.values[0], 1)
             value_dict[solar_name] = value
         this_feature = {
             "type": "Feature",
             "properties": {
-                "GEO_ID": i[0],
-                "STATE": i[1],
-                "CD": i[2],
-                "NAME": str(i[3]),
-                "LSAD": i[4],
-                "CENSUSAREA": i[5],
+                "geometry_name": row.Index,
             }
             | value_dict,
             "geometry": {"type": "Point", "coordinates": [row.lon, row.lat]},
@@ -339,7 +340,7 @@ def save_as_geojson(geo_df, solar_df_dict):
         json_output["features"] += [this_feature]
     if missing_value_count > 0:
         print(f"Missing values for {missing_value_count} geos, continuing.")
-    file_name = f"solar_points_{datetime_string()}.json"
+    file_name = f"output_json/solar_points_{datetime_string()}.json"
     with open(file_name, "w") as f:
         json.dump(json_output, f)
         print(f"Saved to {file_name}")
@@ -383,11 +384,10 @@ def simulate_for_constant_clouds(
         .assign(ghi_adj=cloud_adjustments.ghi / cloud_adjustments.ghi_clear)
     )
     generation_list = []
-    for i, row in geo_df.iterrows():
-        # currently assuming specific format for CD dataset
+    for i, row in enumerate(geo_df.itertuples()):
         point = (row.lat, row.lon)
-        if i[6] % 100 == 0:
-            print(f"i = {i[6]}")
+        if i % 100 == 0:
+            print(f"{i=}")
         solar_generation_value = solar_potential(
             point[0],
             point[1],
@@ -397,13 +397,15 @@ def simulate_for_constant_clouds(
             limit_query=limit_query,
             pv_array_tilt=pv_array_tilt,
         )
-        generation_list += [(point[0], point[1], solar_generation_value, i[0])]
+        generation_list += [(point[0], point[1], solar_generation_value, row.Index)]
     generation_df = (
-        pd.DataFrame(generation_list, columns=["lat", "lon", "generation", "GEO_ID"])
+        pd.DataFrame(
+            generation_list, columns=["lat", "lon", "generation", "geometry_name"]
+        )
         .dropna()
         .reset_index()
     )
-    file_name = f"generation_clouds_matching_lat{lat_source}_lon{lon_source}_tilt{pv_array_tilt}_{datetime_string()}.csv"
+    file_name = f"output_csv/generation_clouds_matching_lat{lat_source}_lon{lon_source}_tilt{pv_array_tilt}_{datetime_string()}.csv"
     generation_df.to_csv(file_name)
     print(f"Saved to {file_name}")
     return generation_df
@@ -450,7 +452,7 @@ def make_timeseries(lat, lon):
     )
     ax.set_ylim([0, (pv_summary.energy_per_day + pv_summary.energy_per_day_std).max()])
     ax.set_title(f"{lat:0.5f}, {lon:0.5f}")
-    file_name = f"timeseries_lat{lat}_lon{lon}.csv"
+    file_name = f"output_csv/timeseries_lat{lat}_lon{lon}.csv"
     pv_summary.to_csv(file_name)
     print(f"Werote {file_name}")
     return ax

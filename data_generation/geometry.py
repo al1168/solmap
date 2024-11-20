@@ -22,7 +22,7 @@ def load_congresional_district_polygons(limit=None, verbose=True):
         congressional_json = json.load(f)
     congressional_df = pd.DataFrame()
     for i, feature in enumerate(congressional_json["features"]):
-        if verbose and i % 50 == 0:
+        if verbose and i % 100 == 0:
             print(f"i = {i}")
         if limit is not None and i >= limit:
             break
@@ -54,6 +54,12 @@ def load_congresional_district_polygons(limit=None, verbose=True):
         congressional_df = pd.concat(
             [congressional_df] + [r.to_frame().T for r in full_row_list]
         )
+        congressional_df["geometry_name"] = (
+            "country_usa-state_"
+            + congressional_df.STATE
+            + "-district_cd"
+            + congressional_df.CD
+        )
     return congressional_df
 
 
@@ -77,36 +83,33 @@ def load_congresional_district_points(
         congressional_summary_df = pd.read_csv(
             file_to_load,
             index_col=[
-                "GEO_ID",
-                "STATE",
-                "CD",
-                "NAME",
-                "LSAD",
-                "CENSUSAREA",
-                "json_index",
+                "geometry_name",
             ],
-            dtype={
-                "GEO_ID": "object",
-                "STATE": "object",
-                "CD": "object",
-                "NAME": "object",
-                "LSAD": "object",
-                "CENSUSAREA": "float64",
-                "json_index": "int64",
-                "lat": "float64",
-                "lon": "float64",
-            },
         )
         return congressional_summary_df
     congressional_df = load_congresional_district_polygons(limit, verbose)
     congressional_summary_df = (
-        congressional_df.groupby(
-            ["GEO_ID", "STATE", "CD", "NAME", "LSAD", "CENSUSAREA", "json_index"]
-        )
-        .agg({"lat": "mean", "lon": "mean"})
+        congressional_df.groupby(["geometry_name"])
+        .agg({"lat": "mean", "lon": "mean", "json_index": "min"})
         .sort_values("json_index")
     )
     if file_to_save is not None:
         congressional_summary_df.to_csv(file_to_save)
         print(f"Wrote to {file_to_save}")
     return congressional_summary_df
+
+
+def load_mexico_district_polygons(limit=None, verbose=True):
+    """
+    Args:
+        limit (int): max number of geometries processes
+        verbose (bool): print progress?
+
+    Returns:
+        df (pd.DataFrame): CDs in DataFrame format, one row per polygon vertex point
+    """
+    # This json of Mexican municipality boundries comes from
+    # https://github.com/PhantomInsights/mexico-geojson
+    # year = 2022
+    with open("mexico.json", "r") as f:
+        mexico_json = json.load(f)
