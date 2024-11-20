@@ -192,8 +192,8 @@ function LeafletMap() {
   };
 
   return (
-    <div className="flex-col">
-      <div>
+    <div className="w-full p-4 flex flex-col items-center">
+      <div className="w-full max-w-4xl mb-4 flex flex-col sm:flex-row justify-between items-center gap-4">
         <Select
           className="max-w-xs"
           label="Select a State"
