@@ -206,18 +206,19 @@ function LeafletMap() {
         }).join(",");
 
         div.innerHTML = `
-          <h4 class="font-semibold mb-2">Legend</h4>
+          <div class="">
+          <h4 class="font-semibold mb-2">Kilowatt hours</h4>
           <div class="relative w-full h-4 mb-4">
             <div
               class="w-full h-full"
               style="background: linear-gradient(to right, ${gradient});"
             ></div>
           </div>
-          <div class="flex justify-between text-xs gap-4">
+          <div class="flex justify-between text-xs gap-10">
             <span>${Math.round(min)}</span>
-            <span>${Math.round((min + max) / 4)}</span>
             <span>${Math.round((min + max) / 2)}</span>
             <span>${Math.round(max)}</span>
+          </div>
           </div>
         `;
 
