@@ -44,4 +44,21 @@
     .custom-popup-zoom-10 {
       width: 750px !important;
     }
+
+    /* Add these rules to ensure Joyride appears above the map */
+    #react-joyride-portal {
+      z-index: 1500 !important;
+    }
+
+    .react-joyride__overlay {
+      z-index: 1500 !important;
+    }
+
+    .react-joyride__spotlight {
+      z-index: 1500 !important;
+    }
+
+    .react-joyride__tooltip {
+      z-index: 1500 !important;
+    }
 }

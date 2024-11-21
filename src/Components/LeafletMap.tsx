@@ -17,7 +17,7 @@ import fipsToState from "../Constants/FipsCodeToStateName";
 import * as d3 from "d3-scale";
 import { interpolateTurbo } from "d3-scale-chromatic";
 import orangeMarker from "../Assets/location-pin.png";
-
+import Joyride from "react-joyride";
 import {
   RadioGroup,
   Radio,
@@ -44,6 +44,7 @@ function LeafletMap() {
   );
   const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(5);
+  const [runTour, setRunTour] = useState(true);
   const handleMarkerClick = (id: string) => {
     setSelectedMarker(id);
   };
@@ -70,7 +71,31 @@ function LeafletMap() {
   const selectedMarkerData = markersData.find(
     (marker) => marker.id === selectedMarker
   );
-
+  const tourSteps = [
+    {
+      target: '.cloud-coverage-selector',
+      content: 'Select different cloud coverage scenarios from various states to see how it affects solar generation',
+      disableBeacon: true,
+      placement: 'right' as const
+    },
+    {
+      target: '.panel-orientation',
+      content: 'Toggle between tilted and horizontal solar panel orientations to compare energy generation',
+      disableBeacon: true,
+      placement: 'right' as const
+    },
+    {
+      target: '.map-container',
+      content: 'Hover over districts to see detailed solar generation data. Click markers to view energy production charts.',
+      disableBeacon: true,
+    },
+    {
+      target: '.legend-container',
+      content: 'This legend shows the range of solar energy generation in kilowatt hours',
+      disableBeacon: true,
+      placement: 'right' as const
+    }
+  ];
   useEffect(() => {
     // add points to polygon
     // @ts-ignore
@@ -135,7 +160,7 @@ function LeafletMap() {
         }
       )
       .openTooltip(e.latlng);
-      openTooltip = tooltip.getTooltip();
+    openTooltip = tooltip.getTooltip();
   }
 
   const resetHighlight = useCallback(
@@ -200,7 +225,7 @@ function LeafletMap() {
       legendControl.onAdd = () => {
         const div = L.DomUtil.create(
           "div",
-          "info legend bg-white p-4 rounded shadow-md text-gray-700 text-sm"
+          "info legend bg-white p-4 rounded shadow-md text-gray-700 text-sm legend-container"
         );
 
         const [min, max] = colorScale.domain();
@@ -251,8 +276,10 @@ function LeafletMap() {
   return (
     <div className="w-full p-4 flex flex-col items-center">
       <div className="w-full max-w-4xl mb-4 flex sm:flex-row justify-between items-center gap-4">
-        <div className="flex-col">
-          <label className="font-semibold text-gray-500">Set Cloud Coverage by State</label>
+        <div className="flex-col cloud-coverage-selector">
+          <label className="font-semibold text-gray-500">
+            Set Cloud Coverage by State
+          </label>
           <Select
             className="max-w-xs mt-2"
             label="Select a State"
@@ -310,8 +337,10 @@ function LeafletMap() {
             </SelectItem>
           </Select>
         </div>
-        <div>
-        <label className="font-semibold text-gray-500">Solar Panel Orientation</label>
+        <div className="panel-orientation">
+          <label className="font-semibold text-gray-500">
+            Solar Panel Orientation
+          </label>
           <RadioGroup
             orientation="horizontal"
             value={viewMode}
@@ -327,8 +356,7 @@ function LeafletMap() {
         center={[38.76265, -94.396089]}
         zoom={5}
         scrollWheelZoom={true}
-        className="border-double border-5 border-indigo-500 rounded-xl w-[80vw] h-[80vh]"
-        // maxBounds={usBounds}
+        className="border-double border-5 border-indigo-500 rounded-xl w-[80vw] h-[80vh] map-container"
         minZoom={4}
       >
         <HandleResizeAndClick />
@@ -373,6 +401,48 @@ function LeafletMap() {
           </Marker>
         ))}
       </MapContainer>
+      <Joyride
+        steps={tourSteps}
+        run={runTour}
+        continuous={true}
+        showSkipButton={true}
+        showProgress={true}
+        styles={{
+          options: {
+            primaryColor: '#4F46E5',
+            backgroundColor: '#ffffff',
+            textColor: '#333',
+            zIndex: 9999,
+          },
+          tooltip: {
+            position: 'relative',
+            zIndex: 9999,
+          },
+          overlay: {
+            position: 'fixed',
+            zIndex: 9999,
+          },
+        }}
+        floaterProps={{
+          styles: {
+            wrapper: {
+              zIndex: 9999,
+            },
+          },
+        }}
+        callback={(data) => {
+          const { status } = data;
+          if (status === 'finished' || status === 'skipped') {
+            setRunTour(false);
+          }
+        }}
+      />
+      <button
+        onClick={() => setRunTour(true)}
+        className="fixed bottom-4 right-4 bg-indigo-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-600 transition-colors"
+      >
+        Start Tour
+      </button>
     </div>
   );
 }
