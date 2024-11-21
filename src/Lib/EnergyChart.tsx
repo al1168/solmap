@@ -59,10 +59,10 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ path, zoomLevel }) => {
   }
 
   const getChartDimensions = (zoom: number) => {
-    if (zoom <= 4) return { width: 350, height: 250 };
-    if (zoom <= 5) return { width: 450, height: 300 };
-    if (zoom <= 6) return { width: 550, height: 350 };
-    if (zoom <= 7) return { width: 650, height: 400 };
+    if (zoom <= 4) return { width: 350, height: 200 };
+    if (zoom <= 5) return { width: 450, height: 250 };
+    if (zoom <= 6) return { width: 550, height: 300 };
+    if (zoom <= 7) return { width: 650, height: 350 };
     return { width: 750, height: 450 };
   };
 
@@ -75,7 +75,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ path, zoomLevel }) => {
         width={dimensions.width}
         height={dimensions.height}
         data={chartData}
-        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        margin={{ top: 5, right: 40, left: 0, bottom: 5 }}
       >
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="week" />

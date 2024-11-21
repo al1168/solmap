@@ -9,7 +9,6 @@ import {
 } from "react-leaflet";
 import L, { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
-import markerIconPng from "leaflet/dist/images/marker-icon.png";
 import markerShadowPng from "leaflet/dist/images/marker-shadow.png";
 import statesData from "../Constants/congstates";
 import mergeGeoJSONByID from "../Lib/Map/mergeGeoJSON";
@@ -17,6 +16,8 @@ import solardata from "../Constants/Solardata";
 import fipsToState from "../Constants/FipsCodeToStateName";
 import * as d3 from "d3-scale";
 import { interpolateTurbo } from "d3-scale-chromatic";
+import orangeMarker from "../Assets/location-pin.png";
+
 import {
   RadioGroup,
   Radio,
@@ -26,9 +27,9 @@ import {
 } from "@nextui-org/react";
 import EnergyChart from "../Lib/EnergyChart";
 let DefaultIcon = L.icon({
-  iconUrl: markerIconPng,
+  iconUrl: orangeMarker,
   shadowUrl: markerShadowPng,
-  iconSize: [25, 41],
+  iconSize: [30, 30],
   iconAnchor: [12, 41],
 });
 
@@ -82,7 +83,7 @@ function LeafletMap() {
     [49.384358, -66.93457] // Northeast corner
   );
 
-  const colorScale = d3.scaleSequential(interpolateTurbo).domain([130, 270]);
+  const colorScale = d3.scaleSequential(interpolateTurbo).domain([145, 265]);
 
   useEffect(() => {
     setFinalFactor(
@@ -107,6 +108,7 @@ function LeafletMap() {
     },
     [finalFactor]
   );
+  let openTooltip: L.Tooltip | null = null;
   function highlightFeature(e: L.LeafletMouseEvent) {
     const layer = e.target;
 
@@ -117,8 +119,10 @@ function LeafletMap() {
 
     const { CD, STATE } = layer.feature.properties;
     const generationValue = layer.feature.properties[finalFactor] ?? "Unknown";
-
-    layer
+    if (openTooltip) {
+      openTooltip.remove();
+    }
+    const tooltip = layer
       .bindTooltip(
         `<strong> District: ${CD}, ${
           fipsToState[Number(STATE)]
@@ -131,6 +135,7 @@ function LeafletMap() {
         }
       )
       .openTooltip(e.latlng);
+      openTooltip = tooltip.getTooltip();
   }
 
   const resetHighlight = useCallback(
@@ -245,67 +250,69 @@ function LeafletMap() {
 
   return (
     <div className="w-full p-4 flex flex-col items-center">
-      <div className="w-full max-w-4xl mb-4 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <Select
-          className="max-w-xs"
-          label="Select a State"
-          onSelectionChange={(key) =>
-            setBaseFactor(Array.from(key)[0] as string)
-          }
-        >
-          <SelectItem
-            key="generation_real"
-            startContent={
-              <Avatar
-                alt="USA"
-                className="w-6 h-6"
-                src="https://flagcdn.com/us.svg"
-              />
+      <div className="w-full max-w-4xl mb-4 flex sm:flex-row justify-between items-center gap-4">
+        <div className="flex-col">
+          <label className="font-semibold text-gray-500">Set Cloud Coverage by State</label>
+          <Select
+            className="max-w-xs mt-2"
+            label="Select a State"
+            onSelectionChange={(key) =>
+              setBaseFactor(Array.from(key)[0] as string)
             }
           >
-            No State
-          </SelectItem>
-          <SelectItem
-            key="generation_texas_clouds"
-            startContent={
-              <Avatar
-                alt="Texas"
-                className="w-6 h-6"
-                src="https://flagcdn.com/us-tx.svg"
-              />
-            }
-          >
-            Texas
-          </SelectItem>
-          <SelectItem
-            key="generation_ny_clouds"
-            startContent={
-              <Avatar
-                alt="NY"
-                className="w-6 h-6"
-                src="https://flagcdn.com/us-ny.svg"
-              />
-            }
-          >
-            New York
-          </SelectItem>
-          <SelectItem
-            key="generation_wash_clouds"
-            startContent={
-              <Avatar
-                alt="Washington"
-                className="w-6 h-6"
-                src="https://flagcdn.com/us-wa.svg"
-              />
-            }
-          >
-            Washington
-          </SelectItem>
-        </Select>
-
+            <SelectItem
+              key="generation_real"
+              startContent={
+                <Avatar
+                  alt="USA"
+                  className="w-6 h-6"
+                  src="https://flagcdn.com/us.svg"
+                />
+              }
+            >
+              No State
+            </SelectItem>
+            <SelectItem
+              key="generation_texas_clouds"
+              startContent={
+                <Avatar
+                  alt="Texas"
+                  className="w-6 h-6"
+                  src="https://flagcdn.com/us-tx.svg"
+                />
+              }
+            >
+              Texas
+            </SelectItem>
+            <SelectItem
+              key="generation_ny_clouds"
+              startContent={
+                <Avatar
+                  alt="NY"
+                  className="w-6 h-6"
+                  src="https://flagcdn.com/us-ny.svg"
+                />
+              }
+            >
+              New York
+            </SelectItem>
+            <SelectItem
+              key="generation_wash_clouds"
+              startContent={
+                <Avatar
+                  alt="Washington"
+                  className="w-6 h-6"
+                  src="https://flagcdn.com/us-wa.svg"
+                />
+              }
+            >
+              Washington
+            </SelectItem>
+          </Select>
+        </div>
         <div>
+        <label className="font-semibold text-gray-500">Solar Panel Orientation</label>
           <RadioGroup
-            label="Orientation"
             orientation="horizontal"
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value)}
@@ -370,8 +377,3 @@ function LeafletMap() {
   );
 }
 export default LeafletMap;
-
-// Option 2: graph/change map when clicking state to see time series of how much sun/`energy generated
-
-// todo:
-// generate data for el paso nyc manhattan seattle
