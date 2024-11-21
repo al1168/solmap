@@ -74,7 +74,7 @@ function LeafletMap() {
   const tourSteps = [
     {
       target: '.cloud-coverage-selector',
-      content: 'Select different cloud coverage scenarios from various states to see how it affects solar generation',
+      content: 'Select different cloud coverage scenarios, making the entire country have the same weather as a specific real location. How does this affect solar generation?',
       disableBeacon: true,
       placement: 'right' as const
     },
@@ -91,7 +91,7 @@ function LeafletMap() {
     },
     {
       target: '.legend-container',
-      content: 'This legend shows the range of solar energy generation in kilowatt hours',
+      content: 'This scale shows the range of solar energy generation in kilowatt hours / year / m2',
       disableBeacon: true,
       placement: 'right' as const
     }
@@ -278,7 +278,7 @@ function LeafletMap() {
       <div className="w-full max-w-4xl mb-4 flex sm:flex-row justify-between items-center gap-4">
         <div className="flex-col cloud-coverage-selector">
           <label className="font-semibold text-gray-500">
-            Set Cloud Coverage by State
+          Set Uniform Cloud Cover
           </label>
           <Select
             className="max-w-xs mt-2"
