@@ -7,6 +7,39 @@ LAT_SAN_FRANCISCO = 37.78128901022419
 LON_SAN_FRANCISCO = -122.4589148156449
 
 
+def arbitrary_coords_lists_to_array(coords, verbose=False):
+    """
+    TODO 1: consider Claude suggestions
+    https://claude.ai/chat/3b92403f-91c5-410d-8090-810a1c92aa82
+    TODO 2: use this helper in other main functions
+    GeoJSON polygons from the internet are in inconsistently formatted
+    lists of lists of lists (of lists). We want a simple array of shape (N, 2).
+    This flattens such an array.
+    """
+    if verbose:
+        print(f"Starting {len(coords)=}")
+    flat = []
+    for item in coords:
+        if verbose:
+            print(f"    Processing {len(item)=}")
+        subitem_lengths_all_2 = all([len(i) == 2 for i in item])
+        subsubitems_all_floats = all(
+            [all([isinstance(j, (float, int)) for j in i]) for i in item]
+        )
+        if verbose:
+            print(f"    {subitem_lengths_all_2=}, {subsubitems_all_floats=}")
+        if subitem_lengths_all_2 and subsubitems_all_floats:
+            if verbose:
+                print(f"        Appending item {len(item)=}")
+            for pair in item:
+                flat.append(pair)
+        else:
+            if verbose:
+                print("        Recursive call")
+            flat.extend(arbitrary_coords_lists_to_array(item, verbose=verbose))
+    return flat
+
+
 def load_congresional_district_polygons(limit=None, verbose=True):
     """
     Args:
@@ -90,9 +123,13 @@ def load_congresional_district_points(
     congressional_df = load_congresional_district_polygons(limit, verbose)
     congressional_summary_df = (
         congressional_df.groupby(["geometry_name"])
-        .agg({"lat": "mean", "lon": "mean", "json_index": "min"})
+        .agg({"lat": "mean", "lon": "mean", "json_index": "min", "GEO_ID": "min"})
         .sort_values("json_index")
     )
+    congressional_summary_df = congressional_summary_df.rename(
+        columns={"GEO_ID": "json_key_value"}
+    )
+    congressional_summary_df["json_key_name"] = "GEO_ID"
     congressional_summary_df["lat"] = (
         congressional_summary_df["lat"].astype(float).round(1)
     )
@@ -135,6 +172,8 @@ def load_mexico_district_points(
         "geometry_name": [],
         "lat": [],
         "lon": [],
+        "json_key_value": [],
+        "json_key_name": [],
     }
     for feature in mexico_json["features"]:
         properties = feature["properties"]
@@ -166,6 +205,8 @@ def load_mexico_district_points(
         mexico_dict["geometry_name"] += [geometry_name]
         mexico_dict["lat"] += [lat]
         mexico_dict["lon"] += [lon]
+        mexico_dict["json_key_value"] += [properties["CVEGEO"]]
+        mexico_dict["json_key_name"] += ["CVEGEO"]
     mexico_df = pd.DataFrame(mexico_dict)
     mexico_df = mexico_df.groupby("geometry_name").first()
     if file_to_save is not None:

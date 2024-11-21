@@ -302,10 +302,27 @@ def generate_values_at_points(
             save_local_cache=True,
             pv_array_tilt=pv_array_tilt,
         )
-        generation_list += [(point[0], point[1], solar_generation_value, row.Index)]
+        generation_list += [
+            (
+                point[0],
+                point[1],
+                solar_generation_value,
+                row.Index,
+                row.json_key_value,
+                row.json_key_name,
+            )
+        ]
     generation_df = (
         pd.DataFrame(
-            generation_list, columns=["lat", "lon", "generation", "geometry_name"]
+            generation_list,
+            columns=[
+                "lat",
+                "lon",
+                "generation",
+                "geometry_name",
+                "json_key_value",
+                "json_key_name",
+            ],
         )
         .dropna()
         .reset_index()
@@ -336,6 +353,8 @@ def save_as_geojson(geo_df, solar_df_dict):
             "type": "Feature",
             "properties": {
                 "geometry_name": row.Index,
+                "json_key_value": row.json_key_value,
+                "json_key_name": row.json_key_name,
             }
             | value_dict,
             "geometry": {"type": "Point", "coordinates": [row.lon, row.lat]},
@@ -400,10 +419,27 @@ def simulate_for_constant_clouds(
             limit_query=limit_query,
             pv_array_tilt=pv_array_tilt,
         )
-        generation_list += [(point[0], point[1], solar_generation_value, row.Index)]
+        generation_list += [
+            (
+                point[0],
+                point[1],
+                solar_generation_value,
+                row.Index,
+                row.json_key_value,
+                row.json_key_name,
+            )
+        ]
     generation_df = (
         pd.DataFrame(
-            generation_list, columns=["lat", "lon", "generation", "geometry_name"]
+            generation_list,
+            columns=[
+                "lat",
+                "lon",
+                "generation",
+                "geometry_name",
+                "json_key_value",
+                "json_key_name",
+            ],
         )
         .dropna()
         .reset_index()
