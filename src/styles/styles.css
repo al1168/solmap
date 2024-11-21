@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+    /* Reset default Leaflet styles */
+    .leaflet-popup {
+      @apply max-w-none !important;
+    }
+
+    .leaflet-popup-content-wrapper {
+      @apply bg-white shadow-lg !important;
+      padding: 0 !important;
+    }
+
+    .leaflet-popup-content {
+      @apply m-0 !important;
+      width: inherit !important;
+    }
+
+    .leaflet-popup-tip {
+      @apply bg-white !important;
+    }
+
+    /* Custom popup sizes */
+    .custom-popup-zoom-4 {
+      width: 350px !important;
+    }
+
+    .custom-popup-zoom-5 {
+      width: 450px !important;
+    }
+
+    .custom-popup-zoom-6 {
+      width: 550px !important;
+    }
+
+    .custom-popup-zoom-7 {
+      width: 650px !important;
+    }
+
+    .custom-popup-zoom-8,
+    .custom-popup-zoom-9,
+    .custom-popup-zoom-10 {
+      width: 750px !important;
+    }
+}

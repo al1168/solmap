@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
-import { MapContainer, TileLayer, useMap, GeoJSON } from "react-leaflet";
-import L from "leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  useMap,
+  GeoJSON,
+  Marker,
+  Popup,
+} from "react-leaflet";
+import L, { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import markerIconPng from "leaflet/dist/images/marker-icon.png";
 import markerShadowPng from "leaflet/dist/images/marker-shadow.png";
@@ -17,6 +24,7 @@ import {
   SelectItem,
   Avatar,
 } from "@nextui-org/react";
+import EnergyChart from "../Lib/EnergyChart";
 let DefaultIcon = L.icon({
   iconUrl: markerIconPng,
   shadowUrl: markerShadowPng,
@@ -33,6 +41,34 @@ function LeafletMap() {
   const [finalFactor, setFinalFactor] = useState<string>(
     baseFactor + (viewMode === "horizontal" ? "_horizontal" : "")
   );
+  const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(5);
+  const handleMarkerClick = (id: string) => {
+    setSelectedMarker(id);
+  };
+  const markersData = [
+    {
+      id: "arizona",
+      position: [32.05526076086956, -110.2840603695652] as LatLngExpression,
+      csvPath: "/csv/Arizona_timeseries.csv",
+      label: "Arizona",
+    },
+    {
+      id: "newYork",
+      position: [40.80584118750001, -73.92918853124999] as LatLngExpression,
+      csvPath: "/csv/new_york_timeseries.csv",
+      label: "New York",
+    },
+    {
+      id: "washington",
+      position: [47.50261456060606, -122.41468303030304] as LatLngExpression,
+      csvPath: "/csv/wash_timeseries.csv",
+      label: "Washington",
+    },
+  ];
+  const selectedMarkerData = markersData.find(
+    (marker) => marker.id === selectedMarker
+  );
 
   useEffect(() => {
     // add points to polygon
@@ -46,7 +82,6 @@ function LeafletMap() {
     [49.384358, -66.93457] // Northeast corner
   );
 
-  // Create a dynamic color scale for smoother transitions
   const colorScale = d3.scaleSequential(interpolateTurbo).domain([130, 270]);
 
   useEffect(() => {
@@ -130,17 +165,23 @@ function LeafletMap() {
     const map = useMap();
 
     useEffect(() => {
+      const handleZoom = () => {
+        setZoomLevel(map.getZoom());
+        console.log(zoomLevel);
+      };
+
+      handleZoom();
       map.invalidateSize();
-      map.on("click", handleMapClick);
+
+      map.on("zoomend", handleZoom);
 
       return () => {
-        map.off("click", handleMapClick);
+        map.off("zoomend", handleZoom);
       };
     }, [map]);
 
     return null;
   }
-
   const Legend = ({
     colorScale,
   }: {
@@ -156,28 +197,30 @@ function LeafletMap() {
           "div",
           "info legend bg-white p-4 rounded shadow-md text-gray-700 text-sm"
         );
-        const [min, max] = colorScale.domain(); // Get the scale domain
-        const steps = 6; // Number of legend steps
-        const ticks = Array.from(
-          { length: steps + 1 },
-          (_, i) => min + (i * (max - min)) / steps
-        );
-        const labels = ticks.map(
-          (tick: d3.NumberValue) =>
-            `<div class="flex items-center mb-1">
-              <span class="inline-block w-5 h-5 mr-2 rounded-sm" style="background:${colorScale(
-                tick
-              )};"></span>
-              <span>${Math.round(Number(tick))}</span>
-            </div>`
-        );
 
-        // Add title and labels
+        const [min, max] = colorScale.domain();
+        const gradientSteps = 100;
+        const gradient = Array.from({ length: gradientSteps + 1 }, (_, i) => {
+          const value = min + (i * (max - min)) / gradientSteps;
+          return colorScale(value);
+        }).join(",");
+
         div.innerHTML = `
           <h4 class="font-semibold mb-2">Legend</h4>
-          ${labels.join("")}
-          <h4 class="font-semibold mb-2"> Kilowatt Hours</h4>
+          <div class="relative w-full h-4 mb-4">
+            <div
+              class="w-full h-full"
+              style="background: linear-gradient(to right, ${gradient});"
+            ></div>
+          </div>
+          <div class="flex justify-between text-xs gap-4">
+            <span>${Math.round(min)}</span>
+            <span>${Math.round((min + max) / 4)}</span>
+            <span>${Math.round((min + max) / 2)}</span>
+            <span>${Math.round(max)}</span>
+          </div>
         `;
+
         return div;
       };
 
@@ -189,6 +232,14 @@ function LeafletMap() {
     }, [map, colorScale]);
 
     return null;
+  };
+
+  const getPopupSize = (zoom: number) => {
+    if (zoom <= 4) return "w-[350px] h-[300px]";
+    if (zoom <= 5) return "w-[450px] h-[350px]";
+    if (zoom <= 6) return "w-[550px] h-[400px]";
+    if (zoom <= 7) return "w-[650px] h-[450px]";
+    return "w-[750px] h-[500px]";
   };
 
   return (
@@ -284,22 +335,42 @@ function LeafletMap() {
           style={style}
           onEachFeature={onEachFeature}
         />
+        {markersData.map((marker) => (
+          <Marker
+            key={marker.id}
+            position={marker.position}
+            eventHandlers={{
+              click: () => handleMarkerClick(marker.id),
+            }}
+          >
+            <Popup
+              className={`custom-popup-zoom-${Math.floor(zoomLevel)}`}
+              maxWidth={800}
+              minWidth={300}
+            >
+              {selectedMarkerData && (
+                <div className={`${getPopupSize(zoomLevel)} bg-white p-4`}>
+                  <h3 className="text-xl font-semibold text-center mb-4">
+                    Energy Chart for {selectedMarkerData.label}
+                  </h3>
+                  <div className="w-full h-full">
+                    <EnergyChart
+                      path={selectedMarkerData.csvPath}
+                      zoomLevel={zoomLevel}
+                    />
+                  </div>
+                </div>
+              )}
+            </Popup>
+          </Marker>
+        ))}
       </MapContainer>
     </div>
   );
 }
-
 export default LeafletMap;
-// Option 1: apply cloud distro on rest of states when clicking on central texas
-// precomputed data to display
 
 // Option 2: graph/change map when clicking state to see time series of how much sun/`energy generated
 
 // todo:
 // generate data for el paso nyc manhattan seattle
-
-// cloud distrobution swap between properties
-
-// blue purple dark - low end
-
-// yellow orange bright red - highend
