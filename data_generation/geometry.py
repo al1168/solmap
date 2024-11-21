@@ -161,7 +161,8 @@ def load_mexico_district_points(
         assert c_array.ndim == 2
         assert c_array.shape[0] >= 3
         assert c_array.shape[1] == 2
-        lat, lon = c_array.mean(axis=0).round(1).tolist()
+        # Note the order
+        lon, lat = c_array.mean(axis=0).round(1).tolist()
         mexico_dict["geometry_name"] += [geometry_name]
         mexico_dict["lat"] += [lat]
         mexico_dict["lon"] += [lon]

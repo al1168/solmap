@@ -32,7 +32,11 @@ SOLAR_WEATHER_ATTRIBUTES = (
     "wind_speed",
 )
 
-POINTS_TO_SKIP = [(58.63942421657351, -141.66555845649208), (58.6, -141.7)]
+POINTS_TO_SKIP = [
+    (58.63942421657351, -141.66555845649208),
+    (58.6, -141.7),
+    (18.8, -108.4),
+]
 
 
 def simulate_pv_ouptput(
@@ -180,7 +184,7 @@ def solar_potential(
             for d in [solar_weather_timeseries, pv_model_results]:
                 d.index = pd.to_datetime(d.index)
         except:
-            print(f"Cache miss at {lat}, {lon}: computing from scratch.")
+            # print(f"Cache miss at {lat}, {lon}: computing from scratch.")
             return solar_potential(
                 lat,
                 lon,
@@ -268,9 +272,10 @@ def solar_potential(
     generation_kWh_year_m2 = generation_kWh_year / PV_PANEL_MODEL.Area
     if save_local_cache and not use_local_cache:
         solar_weather_timeseries.to_csv(solar_weather_cache_file_name)
-        print(f"Wrote {solar_weather_cache_file_name}")
+        # print(f"Wrote {solar_weather_cache_file_name}")
         pv_model_results.to_csv(pv_cache_file_name)
-        print(f"Wrote {pv_cache_file_name}")
+        # print(f"Wrote {pv_cache_file_name}")
+        print(f"Wrote cache for {lat}, {lon}")
     return generation_kWh_year_m2
 
 
