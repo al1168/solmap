@@ -57,5 +57,6 @@
     "@types/papaparse": "^5.3.15",
     "@types/react": "^18.3.12",
     "tailwindcss": "^3.4.14"
-  }
+  },
+  "homepage": "https://al1168.github.io/solmap"
 }
