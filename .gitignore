@@ -22,7 +22,9 @@
 .env
 
 # data
-*.json
+data_generation/*json
+data_generation/*csv
+data_generation/*cache
 
 
 npm-debug.log*
