@@ -1,16 +1,16 @@
 {
   "files": {
     "main.css": "/solmap/static/css/main.3b8ad138.css",
-    "main.js": "/solmap/static/js/main.d8df9401.js",
+    "main.js": "/solmap/static/js/main.fffdb73b.js",
     "static/js/453.73eefe8d.chunk.js": "/solmap/static/js/453.73eefe8d.chunk.js",
     "static/media/location-pin.png": "/solmap/static/media/location-pin.5a02d8ddc82668591d68.png",
     "index.html": "/solmap/index.html",
     "main.3b8ad138.css.map": "/solmap/static/css/main.3b8ad138.css.map",
-    "main.d8df9401.js.map": "/solmap/static/js/main.d8df9401.js.map",
+    "main.fffdb73b.js.map": "/solmap/static/js/main.fffdb73b.js.map",
     "453.73eefe8d.chunk.js.map": "/solmap/static/js/453.73eefe8d.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.3b8ad138.css",
-    "static/js/main.d8df9401.js"
+    "static/js/main.fffdb73b.js"
   ]
 }
