@@ -43,7 +43,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ path, zoomLevel }) => {
         }
         setChartData(results.data as DataPoint[]);
       },
-      error: (error) => {
+      error: (error: { message: any; }) => {
         console.error("Error parsing CSV:", error);
         setError(`Failed to parse CSV: ${error.message}`);
       },

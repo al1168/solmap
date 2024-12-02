@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -52,19 +52,19 @@ function LeafletMap() {
     {
       id: "arizona",
       position: [32.05526076086956, -110.2840603695652] as LatLngExpression,
-      csvPath: "/csv/Arizona_timeseries.csv",
+      csvPath: `${process.env.PUBLIC_URL}/csv/Arizona_timeseries.csv`,
       label: "Arizona",
     },
     {
       id: "newYork",
       position: [40.80584118750001, -73.92918853124999] as LatLngExpression,
-      csvPath: "/csv/new_york_timeseries.csv",
+      csvPath: `${process.env.PUBLIC_URL}/csv/new_york_timeseries.csv`,
       label: "New York",
     },
     {
       id: "washington",
       position: [47.50261456060606, -122.41468303030304] as LatLngExpression,
-      csvPath: "/csv/wash_timeseries.csv",
+      csvPath: `${process.env.PUBLIC_URL}/csv/wash_timeseries.csv`,
       label: "Washington",
     },
   ];
